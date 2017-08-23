@@ -234,7 +234,7 @@ files_to_remove = []
 files_to_copy   = []
 print "Running combine"
 nco = Nco()
-pool = multiprocessing.Pool(processes = multiprocessing.cpu_count())
+pool = multiprocessing.Pool(processes = 16)
 for i in arange(1, tslatdelta / latdelta + 1):
     latidx = int((tlatdelta * (tlatidx - 1) + tslatdelta * (slatidx - 1) + latdelta * i) / latdelta)
     filename = 'output_%04d.psims.nc' % latidx

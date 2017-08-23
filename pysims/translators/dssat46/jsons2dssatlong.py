@@ -1213,7 +1213,8 @@ class DSSATXFileOutput:
             sb += sm + ' PL          82050 82064    40   100    30    40    10\n'
 
         # IRRIGATION
-        sb += '@N      IRRIGATION  IMDEP ITHRL ITHRU IROFF IMETH IRAMT IREFF\n'
+        sb += '@N      IRRIGATION  IMDEP ITHRL ITHRU IROFF IMETH IRAMT IREFF AVWAT\n'
+
         sm_str = self.__get_obj(tr_data, 'irrigation', {})
         if sm_str != {}:
             sb += for_str(sm, 0, 'c', 7, jtfy = 'l') + \
@@ -1224,7 +1225,9 @@ class DSSATXFileOutput:
                   for_field(sm_str, 'iroff', dC, 1, 'c', 5) + \
                   for_field(sm_str, 'imeth', dC, 1, 'c', 5) + \
                   for_field(sm_str, 'iramt', dC, 1, 'c', 5) + \
-                  for_field(sm_str, 'ireff', dC, 1, 'r', 5, ndec = 2) + '\n'
+                  for_field(sm_str, 'ireff', dC, 1, 'r', 5, ndec = 2) + \
+                  for_field(sm_str, 'avwat', dC, 1, 'c', 5) + '\n'
+
         else:
             sb += sm + ' IR             30    50   100 GS000 IR001    10  1.00\n'
 
