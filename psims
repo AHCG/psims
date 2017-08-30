@@ -68,6 +68,7 @@ while [ $# -gt 0 ]; do
     -c) campaign=$2; shift 2;;
     -debug) debug='true'; shift;;
     -t) tilelist=$2; shift 2;;
+    -nosanity) nosanity='true'; shift;;
     -p) paramfile=$2; shift 2;;
     -pcoasters) pcoasters='true'; shift;;
     -r) rundir=$2; shift 2;;
@@ -151,12 +152,17 @@ command -v swift >/dev/null 2>&1 || crash "Swift command is not available in PAT
 
 export SWIFT_HEAP_MAX=5120M
 export SWIFT_USERHOME=$rundir
-export num_chunks=$( grep -i numchunks: $paramfile | awk '{print $2}' )
-export variables=$( grep -i ^variables: $paramfile | awk '{print $2}' )
-export cal_vars=$( grep -i ^cal_vars: $paramfile | awk '{print $2}' )
+export num_chunks=$( $PSIMS_ROOT/bin/param_get.py --input $paramfile --key aggregator:numchunks )
+export variables=$( $PSIMS_ROOT/bin/param_get.py --input $paramfile --key variables )
+export cal_vars=$( $PSIMS_ROOT/bin/param_get.py --input $paramfile --key cal_vars )
+export separate=$( $PSIMS_ROOT/bin/param_get.py --input $paramfile --key separate_variables | tr '[:upper:]' '[:lower:]' )
 
 if [ -z "$num_chunks" ]; then
    export num_chunks=1
+fi
+
+if [ "$separate" != "true" ]; then
+   export separate="false"
 fi
 
 # Check for work_directory location
@@ -172,7 +178,6 @@ fi
 # Copy required files to the work_directory
 mkdir $workdir/campaign
 mkdir $workdir/outputs
-mkdir $workdir/scratch
 cp $tilelist $workdir/tileList.txt
 cp $PSIMS_ROOT/psims.swift $workdir
 cp $PSIMS_ROOT/psims-all.swift $workdir
@@ -196,15 +201,17 @@ if [ "$pcoasters" == "true" ]; then
 fi
 
 # Run sanity test
-first_tile=$( head -1 $tilelist )
-tlatidx=$( echo $first_tile | cut -d'/' -f1 )
-tlonidx=$( echo $first_tile | cut -d'/' -f2 )
-$PSIMS_ROOT/pysims/sanity.py --campaign $campaign --params $workdir/params.psims --tlatidx $tlatidx --tlonidx $tlonidx --tilelist $tilelist
-sanity=$?
-if [ $sanity -ne 0 ]; then
-    rm -rf $workdir
-    echo
-    exit 1
+if [ -z "$nosanity" ]; then
+   first_tile=$( head -1 $tilelist )
+   tlatidx=$( echo $first_tile | cut -d'/' -f1 )
+   tlonidx=$( echo $first_tile | cut -d'/' -f2 )
+   $PSIMS_ROOT/pysims/sanity.py --campaign $campaign --params $workdir/params.psims --tlatidx $tlatidx --tlonidx $tlonidx --tilelist $tilelist
+   sanity=$?
+   if [ $sanity -ne 0 ]; then
+      rm -rf $workdir
+      echo
+      exit 1
+   fi
 fi
 echo
 
@@ -224,7 +231,7 @@ EOF
 cat ABOUT
 echo
 
-arguments="-campaign=$campaign -param=$workdir/params.psims -cwd=$PWD -num_chunks=$num_chunks -variables=$variables -cal_vars=$cal_vars -split=$split"
+arguments="-campaign=$campaign -param=$workdir/params.psims -cwd=$PWD -num_chunks=$num_chunks -variables=$variables -cal_vars=$cal_vars -split=$split -separate=$separate"
 
 # Resume scripts
 generate_resume resume.parts.sh psims.swift $site $pcoasters $arguments
@@ -240,6 +247,14 @@ generate_rerun rerun.combinelat.sh combinelat.swift $site $pcoasters $arguments
 generate_rerun rerun.aggregate.sh aggregate.swift $site $pcoasters $arguments
 generate_rerun rerun.psims-all.sh psims-all.swift $site $pcoasters $arguments
 
+# Print quality info after simulations
+has_quality=$( $PSIMS_ROOT/bin/param_get.py --input $paramfile --key quality )
+if [ -n "$has_quality" ]; then
+    quality="$PSIMS_ROOT/bin/quality.py --input quality.db --params $paramfile --output quality.txt && cat quality.txt"
+    echo $quality >> rerun.parts.sh
+    echo $quality >> rerun.psims-all.sh
+fi
+
 # Run Swift scripts
 ./rerun.psims-all.sh
 
@@ -249,7 +264,7 @@ if [ "$pcoasters" == "true" ] && [ -x "./workers-${site}.stop" ]; then
 fi
 
 # Run combine agg
-has_aggregator=$( grep -i aggregator: params.psims )
+has_aggregator=$( $PSIMS_ROOT/bin/param_get.py --input $paramfile --key aggregator )
 if [ -n "$has_aggregator" ]; then
     echo Running combineagg . . .
     $PSIMS_ROOT/pysims/combineagg.sh params.psims
